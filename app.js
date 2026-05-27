@@ -644,6 +644,7 @@ async function loadCertificateDetails(id) {
           <thead><tr><th>Time</th><th>Type</th><th>Target</th><th>Result</th></tr></thead>
           <tbody id="certAuditBody"><tr><td colspan="4" style="text-align:center;color:var(--text-secondary)">Loading...</td></tr></tbody>
         </table>
+        <div id="auditPagination" class="audit-pagination"></div>
       </div>`;
 
     loadCertificateAudit(id);
@@ -651,6 +652,20 @@ async function loadCertificateDetails(id) {
     content.innerHTML = `<div class="message message-error"><span>Failed to load certificate: ${e.message}</span></div>`;
   }
 }
+
+// ============================================
+// AUDIT PAGINATION STATE
+// ============================================
+
+const auditPagination = {
+  logs: [],
+  currentPage: 1,
+  perPage: 10
+};
+
+// ============================================
+// LOAD AUDIT
+// ============================================
 
 async function loadCertificateAudit(id) {
   const tbody = $('#certAuditBody');
@@ -663,21 +678,122 @@ async function loadCertificateAudit(id) {
     const data = await res.json();
 
     if (!data.logs?.length) {
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-secondary)">No verification history yet</td></tr>';
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="4" style="text-align:center;color:var(--text-secondary)">
+            No verification history yet
+          </td>
+        </tr>
+      `;
       return;
     }
 
-    tbody.innerHTML = data.logs.slice(0, 20).map(l => `
-      <tr>
-        <td>${new Date(l.checked_at).toLocaleString()}</td>
-        <td>${l.check_type.toUpperCase()}</td>
-        <td style="font-family:var(--font-mono);font-size:.6875rem">${l.target}</td>
-        <td>${l.success ? '<span style="color:var(--success)">✓ Passed</span>' : '<span style="color:var(--danger)">✗ Failed</span>'}</td>
-      </tr>
-    `).join('');
+    // Store logs
+    auditPagination.logs = data.logs;
+    auditPagination.currentPage = 1;
+
+    // Render first page
+    renderAuditPage();
+
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--danger)">Failed to load audit history</td></tr>';
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="4" style="color:var(--danger)">
+          Failed to load audit history
+        </td>
+      </tr>
+    `;
   }
+}
+
+// ============================================
+// RENDER PAGE
+// ============================================
+
+function renderAuditPage() {
+  const tbody = $('#certAuditBody');
+  const pagination = $('#auditPagination');
+
+  if (!tbody) return;
+
+  const { logs, currentPage, perPage } = auditPagination;
+
+  const start = (currentPage - 1) * perPage;
+  const end = start + perPage;
+
+  const pageLogs = logs.slice(start, end);
+
+  tbody.innerHTML = pageLogs.map(l => `
+    <tr>
+      <td>${new Date(l.checked_at).toLocaleString()}</td>
+      <td>${l.check_type.toUpperCase()}</td>
+      <td style="font-family:var(--font-mono);font-size:.6875rem">
+        ${l.target}
+      </td>
+      <td>
+        ${
+          l.success
+            ? '<span style="color:var(--success)">✓ Passed</span>'
+            : '<span style="color:var(--danger)">✗ Failed</span>'
+        }
+      </td>
+    </tr>
+  `).join('');
+
+  renderAuditPagination();
+}
+
+// ============================================
+// RENDER PAGINATION CONTROLS
+// ============================================
+
+function renderAuditPagination() {
+  const container = $('#auditPagination');
+
+  if (!container) return;
+
+  const { logs, currentPage, perPage } = auditPagination;
+
+  const totalPages = Math.ceil(logs.length / perPage);
+
+  // Hide pagination if only 1 page
+  if (totalPages <= 1) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="pagination-controls">
+      <button
+        class="pagination-btn"
+        ${currentPage === 1 ? 'disabled' : ''}
+        onclick="changeAuditPage(${currentPage - 1})"
+      >
+        Previous
+      </button>
+
+      <span class="pagination-info">
+        Page ${currentPage} of ${totalPages}
+      </span>
+
+      <button
+        class="pagination-btn"
+        ${currentPage === totalPages ? 'disabled' : ''}
+        onclick="changeAuditPage(${currentPage + 1})"
+      >
+        Next
+      </button>
+    </div>
+  `;
+}
+
+// ============================================
+// CHANGE PAGE
+// ============================================
+
+function changeAuditPage(page) {
+  auditPagination.currentPage = page;
+  renderAuditPage();
 }
 
 // ============================================
